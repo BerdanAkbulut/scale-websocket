@@ -17,30 +17,33 @@ const { RedisSessionStore } = require('./sessionStore');
 
 const sessionStore = new RedisSessionStore(pubClient);
 
+//for sessionID
 const crypto = require('crypto');
 const randomId = () => crypto.randomBytes(8).toString('hex');
 
 //middleware
-// io.use(async (socket, next) => {
-//   const sessionID = socket.handshake.auth.sessionID;
-//   if (sessionID) {
-//     const session = await sessionStore.findSession(sessionID);
-//     if (session) {
-//       socket.sessionID = sessionID;
-//       socket.userID = session.userID;
-//       socket.username = session.username;
-//       return next();
-//     }
-//   }
-//   const username = socket.handshake.auth.username;
-//   if (!username) {
-//     return next(new Error('invalid username'));
-//   }
-//   socket.sessionID = randomId();
-//   socket.userID = randomId();
-//   socket.username = username;
-//   next();
-// });
+io.use(async (socket, next) => {
+  const sessionID = socket.handshake.auth.sessionID;
+  if (sessionID) {
+    const session = await sessionStore.findSession(sessionID);
+    if (session) {
+      socket.sessionID = sessionID;
+      socket.userID = session.userID;
+      socket.username = session.username;
+      return next();
+    }
+  }
+  const { username, userID } = socket.handshake.auth;
+  // const username = socket.handshake.auth.username;
+  if (!username || !userID) {
+    return next(new Error('userId or username not exist'));
+  }
+
+  socket.sessionID = randomId();
+  socket.userID = userID;
+  socket.username = username;
+  next();
+});
 ///
 
 io.on('connection', async (socket) => {
@@ -62,23 +65,34 @@ io.on('connection', async (socket) => {
 
   // fetch existing users
   const users = [];
-  const [sessions] = await Promise.all([sessionStore.findAllSessions()]);
 
-  sessions.forEach((session) => {
-    users.push({
-      userID: session.userID,
-      username: session.username,
-      connected: session.connected,
-    });
-  });
-  socket.emit('users', users);
+  // const sessionID = socket.handshake.auth.sessionID;
 
-  // notify existing users
-  socket.broadcast.emit('user connected', {
-    userID: socket.userID,
-    username: socket.username,
-    connected: true,
-  });
+  // const ss = await sessionStore.findSession(sessionID);
+
+  // console.log('my session', ss);
+
+  // try {
+  //   console.log(await sessionStore.findAllSessions());
+
+  //   sessions.forEach((session) => {
+  //     users.push({
+  //       userID: session.userID,
+  //       username: session.username,
+  //       connected: session.connected,
+  //     });
+  //   });
+  //   socket.emit('users', users);
+
+  //   // notify existing users
+  //   socket.broadcast.emit('user connected', {
+  //     userID: socket.userID,
+  //     username: socket.username,
+  //     connected: true,
+  //   });
+  // } catch (e) {
+  //   console.log('session errorrrr', e);
+  // }
 
   // forward the private message to the right recipient (and to other tabs of the sender)
   socket.on('private message', ({ content, to }) => {
