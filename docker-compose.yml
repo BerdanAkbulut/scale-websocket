@@ -1,3 +1,4 @@
+version: '3'
 services:
   nginx:
     image: nginx:alpine
@@ -13,49 +14,80 @@ services:
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     # network_mode: host
-
   server1:
     build: ./server
     links:
       - redis
+      - redisses
+      # - mongo
     expose:
       - '3000'
     environment:
       - NAME=server1
-
+      - MONGO_URL=mongodb://mongo:27017/sessions
   server2:
     build: ./server
     links:
       - redis
+      - redisses
+      # - mongo
     expose:
       - '3000'
     environment:
       - NAME=server2
-
+      - MONGO_URL=mongodb://mongo:27017/sessions
   server3:
     build: ./server
     links:
       - redis
+      - redisses
+      # - mongo
     expose:
       - '3000'
     environment:
       - NAME=server3
-
+      - MONGO_URL=mongodb://mongo:27017/sessions
   server4:
     build: ./server
     links:
       - redis
+      - redisses
+      # - mongo
     expose:
       - '3000'
     environment:
       - NAME=server4
-
+      - MONGO_URL=mongodb://mongo:27017/sessions
   client:
     build: ./client
     links:
       - nginx
-
   redis:
     image: redis:alpine
+    ports:
+      - '6379:6379'
     expose:
       - '6379'
+  redisses:
+    image: redis:alpine
+    # ports:
+    #   - '6377:6377'
+    expose:
+      - '6377'
+    command: --port 6377
+    # volumes:
+    #   - ./redis2/data:/data
+    #   - ./redis2/config/redis.conf:/usr/local/etc/redis/redis.conf
+  # mongo:
+  #   image: mongo
+  #   environment:
+  #     - MONGO_INITDB_DATABASE=sessions
+  #     - MONGO_INITDB_ROOT_USERNAME=admin
+  #     - MONGO_INITDB_ROOT_PASSWORD=1234
+  #   volumes:
+  #     - ./docker-entrypoint-initdb.d/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+  #     - ./mongo-volume:/data/db
+  #   ports:
+  #     - '27017:27017'
+  #   expose:
+  #     - '27017'
