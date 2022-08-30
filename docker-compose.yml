@@ -1,4 +1,3 @@
-version: '3'
 services:
   nginx:
     image: nginx:alpine
@@ -11,8 +10,8 @@ services:
       - server4
     ports:
       - '3000:80'
-    extra_hosts:
-      - 'host.docker.internal:host-gateway'
+    # extra_hosts:
+    #   - 'host.docker.internal:host-gateway'
     # network_mode: host
   server1:
     build: ./server
@@ -70,8 +69,8 @@ services:
       - '6379'
   redisses:
     image: redis:alpine
-    # ports:
-    #   - '6377:6377'
+    ports:
+      - '6377:6377'
     expose:
       - '6377'
     command: --port 6377
