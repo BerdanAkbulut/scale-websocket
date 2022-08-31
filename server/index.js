@@ -66,47 +66,66 @@ const sessionStore = new RedisSessionStore(sessionClient);
 
 //middleware  -  client should be store own connection on the browser (sessionStorage, localstroge vb.) and we take that session if it is exists. if it is not , then we ll create one.
 io.use(async (socket, next) => {
-  const sessionID = socket.handshake.auth.sessionID;
-  if (sessionID) {
-    const session = await sessionStore.findSession(sessionID);
+  const { userId, userName } = socket.handshake.auth;
+  console.log('USER ID', userId);
+  console.log('USER ID', userName);
+
+  if (userId) {
+    const session = await sessionStore.findSession(userId);
 
     if (session) {
-      socket.sessionID = sessionID;
-      socket.userID = session.userID;
-      socket.username = session.username;
+      console.log('yes, i will use old session?');
+      socket.userId = userId;
+      socket.userName = session.userName;
+      socket.sessionId = session.sessionId;
+      return next();
+    } else {
+      console.log('no session');
+      socket.sessionId = randomId();
+      socket.userId = userId;
+      socket.userName = userName;
       return next();
     }
   }
 
-  // even thought no sessionID , client must be send username and userId for creating session
-  const { username, userID } = socket.handshake.auth;
-
-  if (!username || !userID) {
+  if (!userName || !userId) {
     return next(new Error('userId or username not exist'));
   }
-
-  socket.sessionID = randomId();
-  socket.userID = userID;
-  socket.username = username;
-  next();
 });
 
 io.on('connection', async (socket) => {
   // persist session
-  sessionStore.saveSession(socket.sessionID, {
-    userID: socket.userID,
-    username: socket.username,
+  sessionStore.saveSession(socket.userId, {
+    userId: socket.userId,
+    userName: socket.userName,
     connected: true,
   });
 
+  // sessions.forEach((session) => {
+  //   // if current user already has a session
+  //   if (parseInt(session.userId) === parseInt(socket.userID)) {
+  //     sessionStore.saveSession(session.sessionID, {
+  //       userID: socket.userId,
+  //       username: socket.username,
+  //       connected: true,
+  //     });
+  //     return;
+  //   }
+  //   //  if not
+  //   sessionStore.saveSession(socket.sessionID, {
+  //     userID: socket.userID,
+  //     username: socket.username,
+  //     connected: true,
+  //   });
+  // });
   //emit session details
   socket.emit('session', {
-    sessionID: socket.sessionID,
-    userID: socket.userID,
+    sessionID: socket.sessionId,
+    userId: socket.userId,
   });
 
   // join the "userID" room  -- every connected user listens own userId , when we send message or receive a message we ll use userIds
-  socket.join(socket.userID); // user joined own room which named own
+  socket.join(socket.userId); // user joined own room which named own
 
   // socket.on('test r', (data) => {
   //   console.log('geldi mi', data);
@@ -115,14 +134,14 @@ io.on('connection', async (socket) => {
   // });
 
   // fetch existing users
-  const users = [];
-
   const [sessions] = await Promise.all([sessionStore.findAllSessions()]);
+
+  const users = [];
 
   sessions.forEach((session) => {
     users.push({
-      userID: session.userID,
-      username: session.username,
+      userId: session.userId,
+      userName: session.userName,
       connected: session.connected,
     });
   });
@@ -131,8 +150,8 @@ io.on('connection', async (socket) => {
 
   // notify existing users
   socket.broadcast.emit('user connected', {
-    userID: socket.userID,
-    username: socket.username,
+    userId: socket.userId,
+    userName: socket.userName,
     connected: true,
   });
 
@@ -143,38 +162,40 @@ io.on('connection', async (socket) => {
 
     const message = {
       content,
-      from: socket.userID,
+      from: socket.userId,
       to,
     };
-    socket.to(to).to(socket.userID).emit('private message', message);
+    socket.to(to).to(socket.userId).emit('private message', message);
   });
 
   // when the client emits 'typing', we broadcast it to others
-  socket.on('typing', () => {
-    socket.broadcast.emit('typing', {
-      username: socket.username,
-    });
+  socket.on('typing', ({ to }) => {
+    socket
+      .to(to)
+      .to(socket.userId)
+      .emit('typing', { message: `yazıyor...`, to, from: socket.userId });
+      
   });
 
   // when the client emits 'stop typing', we broadcast it to others
   socket.on('stop typing', () => {
     socket.broadcast.emit('stop typing', {
-      username: socket.username,
+      username: socket.userName,
     });
   });
 
   // notify users upon disconnection
   socket.on('disconnect', async () => {
-    const matchingSockets = await io.in(socket.userID).allSockets();
+    const matchingSockets = await io.in(socket.userId).allSockets();
     const isDisconnected = matchingSockets.size === 0;
     if (isDisconnected) {
       // notify other users
-      socket.broadcast.emit('user disconnected', socket.userID);
+      socket.broadcast.emit('user disconnected', socket.userId);
 
       // update the connection status of the session
-      sessionStore.saveSession(socket.sessionID, {
-        userID: socket.userID,
-        username: socket.username,
+      sessionStore.saveSession(socket.userId, {
+        userId: socket.userId,
+        userName: socket.userName,
         connected: false,
       });
     }
