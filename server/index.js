@@ -1,8 +1,3 @@
-//const express = require('express');
-//const app = express();
-//const server = require('http').createServer(app);
-//const io = require('socket.io')(server);
-
 port = process.env.PORT || 3000;
 const serverName = process.env.NAME || 'Unknown';
 
@@ -13,6 +8,27 @@ const io = new Server(port, {
     credentials: true,
   },
 });
+
+//cassandra
+const cassandra = require('cassandra-driver');
+let authProvider = new cassandra.auth.PlainTextAuthProvider(
+  'Username',
+  'Password'
+);
+const keyspace = 'messages';
+const localDataCenter = 'datacenter1';
+const contactPoints = ['cassandra'];
+
+let cassandraClient = new cassandra.Client({
+  contactPoints,
+  keyspace,
+  localDataCenter,
+});
+
+cassandraClient
+  .connect()
+  .then((res) => console.log('successful connection to cassandra', res))
+  .catch((err) => console.error('cassandra connection failed', err));
 
 const { createAdapter } = require('@socket.io/redis-adapter');
 const Redis = require('ioredis');
@@ -67,9 +83,6 @@ const sessionStore = new RedisSessionStore(sessionClient);
 //middleware  -  client should be store own connection on the browser (sessionStorage, localstroge vb.) and we take that session if it is exists. if it is not , then we ll create one.
 io.use(async (socket, next) => {
   const { userId, userName } = socket.handshake.auth;
-  console.log('USER ID', userId);
-  console.log('USER ID', userName);
-
   if (userId) {
     const session = await sessionStore.findSession(userId);
 
@@ -101,23 +114,6 @@ io.on('connection', async (socket) => {
     connected: true,
   });
 
-  // sessions.forEach((session) => {
-  //   // if current user already has a session
-  //   if (parseInt(session.userId) === parseInt(socket.userID)) {
-  //     sessionStore.saveSession(session.sessionID, {
-  //       userID: socket.userId,
-  //       username: socket.username,
-  //       connected: true,
-  //     });
-  //     return;
-  //   }
-  //   //  if not
-  //   sessionStore.saveSession(socket.sessionID, {
-  //     userID: socket.userID,
-  //     username: socket.username,
-  //     connected: true,
-  //   });
-  // });
   //emit session details
   socket.emit('session', {
     sessionID: socket.sessionId,
@@ -125,13 +121,7 @@ io.on('connection', async (socket) => {
   });
 
   // join the "userID" room  -- every connected user listens own userId , when we send message or receive a message we ll use userIds
-  socket.join(socket.userId); // user joined own room which named own
-
-  // socket.on('test r', (data) => {
-  //   console.log('geldi mi', data);
-  //   //socket.emit('test r', data.content);
-  //   io.sockets.in(socket.userID).emit('test r', data.content);
-  // });
+  socket.join(socket.userId); // user joined own room which owned
 
   // fetch existing users
   const [sessions] = await Promise.all([sessionStore.findAllSessions()]);
@@ -148,7 +138,7 @@ io.on('connection', async (socket) => {
 
   socket.emit('users', users);
 
-  // notify existing users
+  // notify existing users  // broadcast?
   socket.broadcast.emit('user connected', {
     userId: socket.userId,
     userName: socket.userName,
@@ -174,14 +164,6 @@ io.on('connection', async (socket) => {
       .to(to)
       .to(socket.userId)
       .emit('typing', { message: `yazıyor...`, to, from: socket.userId });
-      
-  });
-
-  // when the client emits 'stop typing', we broadcast it to others
-  socket.on('stop typing', () => {
-    socket.broadcast.emit('stop typing', {
-      username: socket.userName,
-    });
   });
 
   // notify users upon disconnection
@@ -201,13 +183,3 @@ io.on('connection', async (socket) => {
     }
   });
 });
-
-// server.listen(port, () => {
-//   console.log('Server listening at port %d', port);
-//   console.log("Hello, I'm %s, how can I help?", serverName);
-// });
-
-// // Routing
-// app.use(express.static(__dirname + '/public'));
-
-// Chatroom
